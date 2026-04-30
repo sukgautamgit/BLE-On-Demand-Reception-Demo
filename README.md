@@ -11,7 +11,7 @@ This repository provides a minimal Zephyr implementation demonstrating:
   * Connectionless data transfer using non-scannable, non-connectable extended advertising
   * Transfer of a fixed 1650-byte demo payload using BLE extended advertisements
 
-The demo is intentionally kept minimal so that the implementation highlights the core scan-request-triggered state transition. Deployment-specific logic such as multi-node selection, smartphone-side filtering, external memory handling, and data-index management can be added on top of this baseline.
+The demo is intentionally kept minimal so that the implementation highlights the core scan-request-triggered state transition. Additional deployment-specific logic, such as multi-node selection, smartphone-side filtering, external memory handling, or data-index management, can be added on top of this baseline.
 
 * * *
 
@@ -66,7 +66,20 @@ CE:AD:BE:AF:BA:11
 
 This address remains fixed during operation and helps identify the node in the nRF Connect mobile application.
 
-In this demo, the node uses scannable extended advertising during the availability phase. In this advertising mode, application data or a device name is not included in the scannable advertising packet itself. Therefore, the fixed random static address is used as the primary identifier for easy visualization in the smartphone app.
+In this demo, the node uses scannable extended advertising during the availability phase. In this mode, application data or a device name cannot be included in the scannable advertising packet itself. Therefore, the fixed random static address is used as the primary identifier for easy visualization in the smartphone app.
+
+* * *
+
+## ⚙️ Configuration Parameters
+
+The demo uses the following key parameters:
+
+  * Scannable advertising burst size: 3 scannable advertising events
+  * Re-availability interval: 5 seconds
+  * Demo payload size: 1650 bytes
+  * Data-transfer mode: non-scannable, non-connectable extended advertising
+
+After each scannable advertising burst, if no scan request is received, the node waits for 5 seconds and then becomes available again. Therefore, if the smartphone misses one availability window, the next trigger opportunity appears after approximately 5 seconds.
 
 * * *
 
@@ -88,7 +101,7 @@ The node treats the received scan request as a trigger.
 
 After receiving the trigger, the node exits the scannable advertising phase and switches to non-scannable, non-connectable extended advertising to transmit the demo payload.
 
-No BLE connection is established.
+_No BLE connection is established._
 
 * * *
 
@@ -102,30 +115,13 @@ This demo considers a single sensor node and transmits a fixed dummy payload.
 
 In a real deployment, this fixed payload can be replaced with logged sensor data stored in internal or external memory.
 
-Additional application-specific logic may be added for:
-
-  * Reading data chunks from memory
-  * Tracking transmitted chunks
-  * Updating memory indices after retrieval
-  * Avoiding retransmission of already retrieved data
-  * Adding packet IDs, timestamps, node IDs, or integrity checks
-
 * * *
 
 ## ▶️ How to Run the Demo
 
-### Step 1: Build and Flash
+### Step 1: Flash the Sensor Node
 
-Build the project using the correct board target.
-
-Example for nRF52832 DK:
-
-```bash
-west build -b nrf52dk/nrf52832 .
-west flash
-```
-
-For other boards, replace the board name accordingly.
+Flash a board with this code. The board acts as the sensor node.
 
 * * *
 
@@ -170,7 +166,7 @@ Data-transfer burst started
 Scannable advertising burst started: 2
 ```
 
-The exact address printed after `From:` depends on the scanner address used by the smartphone.
+The exact address printed after `From:` depends on the address used by the smartphone.
 
 * * *
 
@@ -216,7 +212,7 @@ This avoids race-prone behavior while reusing the same extended advertising set 
 
 * * *
 
-## 🧩 Deployment-Specific Extensions
+## 🧩 Possible Extensions
 
 This repository focuses only on the basic trigger-and-transfer mechanism.
 
@@ -230,13 +226,11 @@ Depending on the deployment, users may extend it with:
   * Real sensor-data formatting
   * Application-layer reliability or duplicate handling
 
-For example, if multiple nearby sensor nodes advertise their availability, a custom smartphone application may apply suitable filtering or selection logic so that the intended node is triggered.
-
-Similarly, in a real data-logging system, memory-control logic can be added to update the read index after a data chunk has been retrieved.
+For example, if multiple nearby sensor nodes advertise their availability, a custom smartphone application may apply suitable filtering or selection logic so that the intended node is triggered. Similarly, in a real data-logging system, memory-control logic can be added to update the read index after a data chunk has been retrieved.
 
 * * *
 
-## 📝 Notes
+## 📝 Note
 
 Scannable advertising is a broadcast mechanism. Any nearby device performing active scanning can, in principle, send a scan request after receiving the scannable advertisement.
 
