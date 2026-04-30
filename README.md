@@ -115,6 +115,8 @@ This demo considers a single sensor node and transmits a fixed dummy payload.
 
 In a real deployment, this fixed payload can be replaced with logged sensor data stored in internal or external memory.
 
+*If the logged sensor data in a real application is larger than 1650 bytes, it can be divided across multiple extended advertising events, each of which can be retransmitted independently. One such 1650-byte extended advertising event takes approximately 17 ms to transmit.*
+
 * * *
 
 ## ▶️ How to Run the Demo
