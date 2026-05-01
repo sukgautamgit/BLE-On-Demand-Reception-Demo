@@ -21,19 +21,27 @@
 
 /*
  * Number of extended advertising events transmitted in each burst.
+ *
  * For SCANNABLE mode, this defines how many availability beacons are sent
  * before the controller terminates the burst automatically.
+ *
  * For DATA mode, this defines how many data-carrying copies of the same
  * extended advertising event are sent before termination of the burst.
  */
-
 #define ADV_EVENT_COUNT        3U
 
 /*
- * Delay after which scannable advertising is restarted when no trigger is
- * received, or after the data-transfer burst completes. 
+ * If no scan request is received during an availability window, the node
+ * opens the next availability window after this interval.
  */
-#define SCANNABLE_RESTART_MS   5000U
+#define AVAILABILITY_RETRY_MS  5000U
+
+/*
+ * After the data-transfer burst completes, the node waits before returning
+ * to scannable advertising. This gives the user time to disable smartphone
+ * scanning if no further data request is needed.
+ */
+#define POST_DATA_RESTART_MS   10000U
 
 enum adv_mode {
 	MODE_SCANNABLE,  /* Availability / trigger-detection phase */
@@ -65,7 +73,6 @@ static bool flag_trigger = false;
  * extended advertising event, and the individual fragments include the
  * app-specific header bytes required by the application format.
  */
-
 static const uint8_t adv_payload[] = {
 	0x59, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
 	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11,
@@ -103,11 +110,10 @@ static const struct bt_data sd_scannable[] = {
 };
 
 /*
- * Dummy application data used to demonstrate the large single-event data
- * transfer case discussed in the paper, where the node transmits a 1650-byte
- * application buffer using extended advertising. The payload is split across
- * multiple AD structures for transmission through one extended advertising
- * event.
+ * Data payload for the large single-event transfer case.
+ * The node transmits a 1650-byte application buffer using extended advertising.
+ * The payload is split across multiple AD structures for transmission through
+ * one extended advertising event.
  */
 static const struct bt_data ad_data[] = {
 	BT_DATA(BT_DATA_MANUFACTURER_DATA, adv_payload, sizeof(adv_payload)),
@@ -123,13 +129,16 @@ static struct bt_le_ext_adv *adv;
 
 /*
  * Advertising parameters for the scannable availability phase.
- * The node emits short scannable (non-connectable) extended advertisements and waits for a
- * scan request from a nearby active scanner.
+ * The node emits scannable, non-connectable extended advertisements and waits
+ * for a scan request from a nearby active scanner.
+ *
+ * BT_LE_ADV_OPT_NOTIFY_SCAN_REQ is required so that scanned_cb() is invoked
+ * when a scan request is received.
  */
 static struct bt_le_adv_param adv_param =
 	BT_LE_ADV_PARAM_INIT(BT_LE_ADV_OPT_EXT_ADV |
 			     BT_LE_ADV_OPT_SCANNABLE |
-			     BT_LE_ADV_OPT_NOTIFY_SCAN_REQ |  /*Enabled to ensure that the scanned_cb() callback executes*/
+			     BT_LE_ADV_OPT_NOTIFY_SCAN_REQ |
 			     BT_LE_ADV_OPT_USE_IDENTITY |
 			     BT_LE_ADV_OPT_NO_2M,
 			     0xA0, /* 100 ms */
@@ -138,8 +147,8 @@ static struct bt_le_adv_param adv_param =
 
 /*
  * Advertising parameters for the non-scannable data-transfer phase.
- * Once triggered, the node transmits data using non-scannable, non-connectable extended
- * advertisements.
+ * Once triggered, the node transmits data using non-scannable, non-connectable
+ * extended advertisements.
  */
 static struct bt_le_adv_param adv_data_param =
 	BT_LE_ADV_PARAM_INIT(BT_LE_ADV_OPT_EXT_ADV |
@@ -152,7 +161,8 @@ static struct bt_le_adv_param adv_data_param =
 /*
  * Start advertising with no time limit but with a bounded number of events.
  * The controller terminates the burst automatically after ADV_EVENT_COUNT
- * advertising events.
+ * advertising events. The sent_cb() callback is invoked when this limit is
+ * reached.
  */
 static struct bt_le_ext_adv_start_param ext_adv_param =
 	BT_LE_EXT_ADV_START_PARAM_INIT(0, ADV_EVENT_COUNT);
@@ -165,9 +175,9 @@ static K_WORK_DELAYABLE_DEFINE(restart_scannable_work,
 			       restart_scannable_work_handler);
 
 /*
- * Advertising state transitions are performed from Zephyr work handlers
- * rather than directly inside Bluetooth callbacks. This keeps callbacks short
- * and avoids races while stopping, reconfiguring, and restarting the same
+ * Advertising state transitions are performed from Zephyr work handlers rather
+ * than directly inside Bluetooth callbacks. This keeps callbacks short and
+ * avoids races while stopping, reconfiguring, and restarting the same
  * advertising set.
  */
 
@@ -182,9 +192,9 @@ static int stop_adv_if_needed(void)
 	return err;
 }
 
-static void schedule_scannable_restart(void)
+static void schedule_scannable_restart(uint32_t delay_ms)
 {
-	k_work_reschedule(&restart_scannable_work, K_MSEC(SCANNABLE_RESTART_MS));
+	k_work_reschedule(&restart_scannable_work, K_MSEC(delay_ms));
 }
 
 static int start_scannable_adv(void)
@@ -215,7 +225,8 @@ static int start_scannable_adv(void)
 	}
 
 	scannable_cnt++;
-	printk("\nScannable advertising burst started: %u", scannable_cnt);
+	printk("\nScannable advertising burst started: %u\n",
+	       scannable_cnt);
 
 	return 0;
 }
@@ -247,7 +258,9 @@ static int start_data_adv(void)
 		return err;
 	}
 
-	printk("Data-transfer burst started\n");
+	printk("Data-transfer burst started: 1650-byte payload, %u retransmissions\n",
+	       ADV_EVENT_COUNT);
+
 	return 0;
 }
 
@@ -259,22 +272,30 @@ static void sent_cb(struct bt_le_ext_adv *adv,
 
 	if (current_mode == MODE_SCANNABLE) {
 		/*
-		 * If no trigger was received during this scannable burst, restart
-		 * scannable advertising after the configured interval.
+		 * If no trigger was received during this scannable burst, open
+		 * the next availability window after AVAILABILITY_RETRY_MS.
 		 *
 		 * If a trigger was already received, the data-mode transition has
-		 * already been scheduled from the scanned callback, so the normal
+		 * already been scheduled from scanned_cb(), so the normal
 		 * scannable restart path should not be taken here.
 		 */
 		if (!flag_trigger) {
-			schedule_scannable_restart();
+			printk("No trigger received. Next availability window in %u ms.\n",
+			       AVAILABILITY_RETRY_MS);
+			schedule_scannable_restart(AVAILABILITY_RETRY_MS);
 		}
 		return;
 	}
 
 	if (current_mode == MODE_DATA) {
-		/* After the data-transfer burst ends, return to scannable mode. */
-		schedule_scannable_restart();
+		/*
+		 * After the data-transfer burst ends, return to scannable mode
+		 * after POST_DATA_RESTART_MS. This allows the user to disable
+		 * smartphone scanning if no further data request is needed.
+		 */
+		printk("Data-transfer burst completed. Scannable advertising will resume in %u ms.\n",
+		       POST_DATA_RESTART_MS);
+		schedule_scannable_restart(POST_DATA_RESTART_MS);
 	}
 }
 
@@ -293,15 +314,23 @@ static void scanned_cb(struct bt_le_ext_adv *adv,
 	trigger_cnt++;
 
 	bt_addr_le_to_str(info->addr, addr, sizeof(addr));
-	printk(", Trigger received: %u, From: %s\n", trigger_cnt, addr);
+	printk("Trigger received: %u, From: %s\n", trigger_cnt, addr);
 
 	k_work_submit(&data_mode_work);
 }
 
 static struct bt_le_ext_adv_cb ext_callbacks = {
-	.sent = sent_cb,        /*Executes when configured number of extended advertising events
-	                         have been completed*/
-	.scanned = scanned_cb,  /* Executes when a scan request is received */
+	/*
+	 * Executes when the configured number of extended advertising events
+	 * has been completed.
+	 */
+	.sent = sent_cb,
+
+	/*
+	 * Executes when a scan request is received and scan response data has
+	 * been sent to the active scanner.
+	 */
+	.scanned = scanned_cb,
 };
 
 static void data_mode_work_handler(struct k_work *work)
@@ -334,8 +363,6 @@ static void restart_scannable_work_handler(struct k_work *work)
 	start_scannable_adv();
 }
 
-
-
 static void set_random_static_address(void)
 {
 	bt_addr_le_t addr;
@@ -362,7 +389,10 @@ int main(void)
 
 	printk("Starting broadcaster\n");
 
-	/*Enables easy identification of device on the smartphone app through a fixed address*/
+	/*
+	 * A fixed random static address enables easy identification of the
+	 * sensor node in the smartphone app.
+	 */
 	set_random_static_address();
 
 	err = bt_enable(NULL);
