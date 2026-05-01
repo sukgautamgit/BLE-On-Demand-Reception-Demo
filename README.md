@@ -177,11 +177,11 @@ The received 1650-byte demo payload should become visible on the smartphone app.
 Example node logs:
 
 ```text
-Scannable advertising burst started: 1 (3 events)
+Scannable advertising burst started: 1 
 Trigger received: 1, From: XX:XX:XX:XX:XX:XX
 Data-transfer burst started: 1650-byte payload, 3 retransmissions
 Data-transfer burst completed. Scannable advertising will resume in 10000 ms.
-Scannable advertising burst started: 2 (3 events)
+Scannable advertising burst started: 2
 ```
 
 The exact address printed after `From:` depends on the address used by the smartphone.
