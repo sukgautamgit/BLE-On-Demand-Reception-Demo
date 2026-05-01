@@ -32,15 +32,14 @@ README.md
 
 This project must be built within the Nordic nRF Connect SDK (NCS) environment.
 
-For smartphone-side visualization:
+For smartphone-side visualization, use any BLE smartphone application that supports scan control and BLE advertising extensions, such as:
 
   * nRF Connect for Mobile
 
-For observing serial logs:
+For observing serial logs, use any standard serial terminal, such as:
 
   * PuTTY
   * nRF Connect Serial Terminal
-  * Any standard serial terminal
 
 * * *
 
@@ -56,33 +55,6 @@ For nRF5340, ensure that both cores are flashed/configured according to the boar
 
 * * *
 
-## 📡 Static Address Used
-
-The sensor node uses the following random static address:
-
-```text
-CE:AD:BE:AF:BA:11
-```
-
-This address remains fixed during operation and helps identify the node in the nRF Connect mobile application.
-
-In this demo, the node uses scannable extended advertising during the availability phase. In this mode, application data or a device name cannot be included in the scannable advertising packet itself. Therefore, the fixed random static address is used as the primary identifier for easy visualization in the smartphone app.
-
-* * *
-
-## ⚙️ Configuration Parameters
-
-The demo uses the following key parameters:
-
-  * Scannable advertising burst size: 3 scannable advertising events
-  * Re-availability interval: 5 seconds
-  * Demo payload size: 1650 bytes
-  * Data-transfer mode: non-scannable, non-connectable extended advertising
-
-After each scannable advertising burst, if no scan request is received, the node waits for 5 seconds and then becomes available again. Therefore, if the smartphone misses one availability window, the next trigger opportunity appears after approximately 5 seconds.
-
-* * *
-
 ## 🔄 Demo Operation
 
 The sensor node operates in two phases.
@@ -91,7 +63,9 @@ The sensor node operates in two phases.
 
 The node periodically transmits bounded scannable extended advertising bursts.
 
-These bursts keep the node available for a smartphone-initiated trigger without keeping the node in a continuous scanning/listening state.
+In this demo, each availability window contains **3 scannable advertising events**. These events make the node reachable for receiving a smartphone-triggered data-retrieval request without keeping the node in a continuous scanning/listening state.
+
+If no scan request is received in one availability window, the node waits for **5 seconds** before opening the next availability window. Therefore, if the smartphone misses one trigger opportunity, the next opportunity appears after approximately **5 seconds**.
 
 When a nearby smartphone is operated in active scanning mode, it may issue a BLE scan request after receiving the node's scannable advertisement.
 
@@ -101,7 +75,14 @@ The node treats the received scan request as a trigger.
 
 After receiving the trigger, the node exits the scannable advertising phase and switches to non-scannable, non-connectable extended advertising to transmit the demo payload.
 
+In this demo, the data-transfer burst is configured with a retransmission count of **3**, meaning that the same 1650-byte demo payload is advertised through **3 extended advertising events** during the data-transfer phase.
+
+After the data-transfer burst completes, the node waits for **10 seconds** before resuming scannable advertising. This gives the user time to disable smartphone scanning if no further data request is needed.
+
 _No BLE connection is established._
+
+The 5-second availability retry interval and the 10-second post-transfer return interval can be modified according to application requirements.
+
 
 * * *
 
@@ -111,11 +92,43 @@ This demo considers a single sensor node and transmits a fixed dummy payload.
 
   * Payload size: 1650 bytes
   * Transfer mode: non-scannable, non-connectable extended advertising
+  * Data retransmission count: 3 extended advertising events
   * Purpose: demonstration of the on-demand trigger-and-transfer mechanism
+
+*If the logged data in a real application is larger than 1650 bytes, it can be divided across multiple extended advertising events, each of which can be retransmitted independently. In this demo setup, one such 1650-byte extended advertising event takes approximately 17 ms to transmit.*
 
 In a real deployment, this fixed payload can be replaced with logged sensor data stored in internal or external memory.
 
-*If the logged sensor data in a real application is larger than 1650 bytes, it can be divided across multiple extended advertising events, each of which can be retransmitted independently. One such 1650-byte extended advertising event takes approximately 17 ms to transmit.*
+* * *
+
+## 📡 Static Address Used
+
+The sensor node uses the following random static address:
+
+```text
+CE:AD:BE:AF:BA:11
+```
+
+This address remains fixed during operation and helps identify the node in the smartphone app.
+
+In this demo, the node uses scannable extended advertising during the availability phase. In this mode, application data or a device name cannot be included in the scannable advertising packet itself. Therefore, the fixed random static address is used as the primary identifier for easy visualization in the smartphone app.
+
+
+* * *
+
+## 🧠 Callback Roles
+
+The implementation mainly relies on two extended advertising callbacks:
+
+  * `scanned_cb()`
+
+    This callback is invoked when a scan request is received during the scannable advertising phase. In this demo, scan request reception is treated as the smartphone trigger for data retrieval. The callback schedules the transition to the data-transfer phase.
+
+  * `sent_cb()`
+
+    This callback is invoked after the configured advertising burst is completed. If the node was in the availability phase and no trigger was received, it schedules the next availability window after 5 seconds. If the node was in the data-transfer phase, it schedules the return to the availability phase after 10 seconds.
+
+The actual advertising stop/reconfigure/restart operations are not performed directly inside these callbacks. They are handled through Zephyr work scheduling, as explained below.
 
 * * *
 
@@ -143,7 +156,7 @@ Bluetooth initialized
 
 ### Step 3: Start Smartphone Scanning
 
-Open the nRF Connect mobile application and start scanning.
+Open the smartphone BLE app and start scanning.
 
 Look for the device with address:
 
@@ -159,16 +172,25 @@ Since the node uses a fixed random static address, it can be easily identified i
 
 Once the smartphone sends a scan request, the node switches to the data-transfer phase.
 
-Example logs:
+The received 1650-byte demo payload should become visible on the smartphone app. This has been verified using the nRF Connect Mobile app.
+
+Example node logs:
 
 ```text
-Scannable advertising burst started: 1
+Scannable advertising burst started: 1 (3 events)
 Trigger received: 1, From: XX:XX:XX:XX:XX:XX
-Data-transfer burst started
-Scannable advertising burst started: 2
+Data-transfer burst started: 1650-byte payload, 3 retransmissions
+Data-transfer burst completed. Scannable advertising will resume in 10000 ms.
+Scannable advertising burst started: 2 (3 events)
 ```
 
 The exact address printed after `From:` depends on the address used by the smartphone.
+
+If no scan request is received during an availability window, the node opens the next availability window after approximately 5 seconds.
+
+After data transfer completes, the node waits for approximately 10 seconds before resuming scannable advertising. This delay gives the user time to disable smartphone scanning if no further data request is required.
+
+Both intervals can be changed according to application requirements.
 
 * * *
 
@@ -186,9 +208,13 @@ The exact address printed after `From:` depends on the address used by the smart
 
     The node has switched to the non-scannable extended advertising phase and is transmitting the 1650-byte demo payload.
 
+  * `Data-transfer burst completed`
+
+    The configured data-transfer burst has completed. The node will wait for 10 seconds before returning to the availability phase.
+
   * Next `Scannable advertising burst started`
 
-    The node has returned to the availability phase after the data-transfer burst.
+    The node has returned to the availability phase. This occurs after the 10-second post-transfer return interval if data was transmitted, or after the 5-second retry interval if no scan request was received.
 
 * * *
 
