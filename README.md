@@ -127,7 +127,7 @@ The implementation mainly relies on two extended advertising callbacks:
 
     This callback is invoked after the configured advertising burst is completed. If the node was in the availability phase and no trigger was received, it schedules the next availability window after 5 seconds. If the node was in the data-transfer phase, it schedules the return to the availability phase after 10 seconds.
 
-The actual advertising stop/reconfigure/restart operations are not performed directly inside these callbacks. They are handled through Zephyr work scheduling, as explained below.
+The actual advertising stop/reconfigure/restart operations are not performed directly inside these callbacks. They are handled through Zephyr work scheduling.
 
 * * *
 
