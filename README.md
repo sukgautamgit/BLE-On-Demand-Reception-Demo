@@ -93,7 +93,6 @@ This demo considers a single sensor node and transmits a fixed dummy payload.
   * Payload size: 1650 bytes
   * Transfer mode: non-scannable, non-connectable extended advertising
   * Data retransmission count: 3 extended advertising events
-  * Purpose: demonstration of the on-demand trigger-and-transfer mechanism
 
 *If the logged data in a real application is larger than 1650 bytes, it can be divided across multiple extended advertising events, each of which can be retransmitted independently. In this demo setup, one such 1650-byte extended advertising event takes approximately 17 ms to transmit.*
 
