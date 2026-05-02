@@ -61,7 +61,7 @@ The sensor node operates in two phases.
 
 ### 1. Availability Phase
 
-The node periodically transmits bounded scannable extended advertising bursts.
+The node periodically transmits bounded scannable extended advertising bursts to make itself available for receiving a trigger for data transmission.
 
 In this demo, each availability window contains **3 scannable advertising events**. These events make the node reachable for receiving a smartphone-triggered data-retrieval request without keeping the node in a continuous scanning/listening state.
 
@@ -110,7 +110,7 @@ CE:AD:BE:AF:BA:11
 
 This address remains fixed during operation and helps identify the node in the smartphone app.
 
-In this demo, the node uses scannable extended advertising during the availability phase. In this mode, application data or a device name cannot be included in the scannable advertising packet itself. Therefore, the fixed random static address is used as the primary identifier for easy visualization in the smartphone app.
+The node uses scannable extended advertising during the availability phase. In this mode, application data or a device name cannot be included in the scannable advertising packet itself. Therefore, the fixed random static address is used as the primary identifier for easy visualization in the smartphone app.
 
 
 * * *
