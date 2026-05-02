@@ -15,19 +15,6 @@ The demo is intentionally kept minimal so that the implementation highlights the
 
 * * *
 
-## 📁 Repository Structure
-
-```text
-src/
-  main.c
-
-CMakeLists.txt
-prj.conf
-README.md
-```
-
-* * *
-
 ## 💻 Software Requirements
 
 This project must be built within the Nordic nRF Connect SDK (NCS) environment.
