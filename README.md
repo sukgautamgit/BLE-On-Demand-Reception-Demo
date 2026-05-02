@@ -32,7 +32,7 @@ README.md
 
 This project must be built within the Nordic nRF Connect SDK (NCS) environment.
 
-For smartphone-side visualization, use any BLE smartphone application that supports scan control and BLE advertising extensions, such as:
+For smartphone-side visualization, use any BLE smartphone application that supports scan control and BLE advertising extensions (BLE version 5.x), such as:
 
   * nRF Connect for Mobile
 
